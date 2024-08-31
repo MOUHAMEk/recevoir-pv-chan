@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulter les PV de Chantier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            font-size: 30px;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            background-color: #3498db;
+            color: white;
+            padding: 20px;
+            text-transform: uppercase;
+            width: 100%;
+        }
+
+        main {
+            margin-top: 50px;
+            text-align: center;
+            width: 80%;
+        }
+
+        .day-selection, .pv-display {
+            margin: 20px 0;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .pv-content {
+            display: none;
+            margin-top: 20px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+
+        .pv-content img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .pv-content h2 {
+            margin-top: 0;
+        }
+
+        .pv-content textarea {
+            width: 100%;
+            height: 100px;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            resize: none;
+        }
+        
+        .pv-content a {
+            display: inline-block;
+            margin-top: 20px;
+            background-color: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            text-decoration: none;
+        }
+
+        .pv-content a:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Consulter les PV de Chantier</h1>
+    </header>
+
+    <main>
+        <div class="day-selection">
+            <label for="dayDropdown">Sélectionnez un jour:</label>
+            <select id="dayDropdown">
+                <option value="" disabled selected>Choisir un jour...</option>
+            </select>
+            <button id="viewPVButton" onclick="viewPV()">Voir le PV de ce jour</button>
+        </div>
+
+        <div id="pvContent" class="pv-content">
+            <h2>Procès-verbal du <span id="pvDate"></span></h2>
+            <label>Nom du projet:</label>
+            <p id="pvProject"></p>
+
+            <label>Document:</label>
+            <a id="pvDocument" href="#" target="_blank" style="display: none;">Télécharger / Lire le document</a>
+
+            <label>Étaient présents:</label>
+            <textarea id="pvPresence" readonly></textarea>
+
+            <label>Approvisionnement:</label>
+            <textarea id="pvApprovision" readonly></textarea>
+
+            <label>Observations:</label>
+            <textarea id="pvObservations" readonly></textarea>
+
+            <label>Avancement des travaux:</label>
+            <textarea id="pvAvancement" readonly></textarea>
+
+            <label>Commentaire:</label>
+            <textarea id="pvCommentaire" readonly></textarea>
+        </div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js";
+        import { getStorage, ref as storageRef, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-storage.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCOA0a_rjXqY99KXyyuHEiPOJDGGapZQUo",
+            authDomain: "suivi-49954.firebaseapp.com",
+            databaseURL: "https://suivi-49954-default-rtdb.firebaseio.com",
+            projectId: "suivi-49954",
+            storageBucket: "suivi-49954.appspot.com",
+            messagingSenderId: "141836603566",
+            appId: "1:141836603566:web:aaff934468238d958cdd3f",
+            measurementId: "G-3CMYEPPYK8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const storage = getStorage(app);
+
+        const dayDropdown = document.getElementById("dayDropdown");
+        const pvDate = document.getElementById("pvDate");
+        const pvProject = document.getElementById("pvProject");
+        const pvDocument = document.getElementById("pvDocument");
+        const pvPresence = document.getElementById("pvPresence");
+        const pvApprovision = document.getElementById("pvApprovision");
+        const pvObservations = document.getElementById("pvObservations");
+        const pvAvancement = document.getElementById("pvAvancement");
+        const pvCommentaire = document.getElementById("pvCommentaire");
+        const pvContent = document.getElementById("pvContent");
+
+        const days = [...Array(31).keys()].map(i => `septembre ${i + 1}`).concat([...Array(30).keys()].map(i => `octobre ${i + 1}`));
+        days.forEach(day => {
+            const option = document.createElement("option");
+            option.value = day;
+            option.textContent = day;
+            dayDropdown.appendChild(option);
+        });
+
+        window.viewPV = async function() {
+            const selectedDay = dayDropdown.value;
+
+            if (selectedDay) {
+                try {
+                    const pvRef = ref(db, 'pvs/' + selectedDay);
+                    const snapshot = await get(pvRef);
+
+                    if (snapshot.exists()) {
+                        const pvData = snapshot.val();
+
+                        pvDate.textContent = selectedDay;
+                        pvProject.textContent = "Construction du siège du Conseil économique, social et environnemental";
+                        pvPresence.value = pvData.presence || "";
+                        pvApprovision.value = pvData.approvision || "";
+                        pvObservations.value = pvData.observations || "";
+                        pvAvancement.value = pvData.avancement || "";
+                        pvCommentaire.value = pvData.commentaire || "";
+
+                        if (pvData.pdfURL) {
+                            pvDocument.href = pvData.pdfURL;
+                            pvDocument.style.display = "inline-block";
+                        } else {
+                            pvDocument.style.display = "none";
+                        }
+
+                        pvContent.style.display = "block";
+                    } else {
+                        alert("Aucun PV trouvé pour cette date.");
+                    }
+                } catch (error) {
+                    alert("Erreur lors de la récupération du PV. Veuillez réessayer.");
+                    console.error("Erreur lors de la récupération du PV : ", error);
+                }
+            } else {
+                alert("Veuillez sélectionner un jour avant de voir le PV.");
+            }
+        };
+    </script>
+
+</body>
+</html>
